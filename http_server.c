@@ -87,6 +87,83 @@ void httpd_handler(struct evhttp_request *req, void *arg) {
 }
 
 
+//处理reg模块
+void reg_handler(struct evhttp_request *req, void *arg) 
+{
+    printf("get connection!\n");
+
+    //获取客户端请求的URI(使用evhttp_request_uri或直接req->uri)
+    const char *uri;
+    uri = evhttp_request_uri(req);
+    printf("[uri]=%s\n", uri);
+
+
+    //获取POST方法的数据
+    size_t post_size = EVBUFFER_LENGTH(req->input_buffer);
+    char *request_data = (char *) EVBUFFER_DATA(req->input_buffer);
+    char request_data_buf[4096] = {0};
+    memcpy(request_data_buf, request_data, post_size);
+    printf("[post_data]=\n%s\n", request_data_buf);
+
+
+    /*
+       具体的：可以根据GET/POST的参数执行相应操作，然后将结果输出
+       ...
+     */
+    //request_data_buf 就是前端给我们发送的过来的json字符串 post数据
+    
+    //解析json
+    cJSON *root = cJSON_Parse(request_data_buf);
+
+    printf("username = %s\n", cJSON_GetObjectItem(root, "username")->valuestring);
+    printf("password = %s\n", cJSON_GetObjectItem(root, "password")->valuestring);
+    printf("isDrvier = %s\n", cJSON_GetObjectItem(root, "driver")->valuestring);
+    printf("tel = %s\n", cJSON_GetObjectItem(root, "tel")->valuestring);
+    printf("email = %s\n", cJSON_GetObjectItem(root, "email")->valuestring);
+    printf("id_card = %s\n", cJSON_GetObjectItem(root, "id_card")->valuestring);
+
+
+    //将用户的数据存储到数据库中
+
+    cJSON *response_root = cJSON_CreateObject();
+
+    cJSON_AddStringToObject(response_root, "result", "ok");
+    cJSON_AddNumberToObject(response_root, "recode", 0);
+
+
+    char *response_data = cJSON_Print(response_root);
+
+
+    /* 输出到客户端 */
+    //HTTP header
+    evhttp_add_header(req->output_headers, "Server", MYHTTPD_SIGNATURE);
+    evhttp_add_header(req->output_headers, "Content-Type", "text/plain; charset=UTF-8");
+    evhttp_add_header(req->output_headers, "Connection", "close");
+
+    //输出的内容
+    struct evbuffer *buf;
+    buf = evbuffer_new();
+    evbuffer_add_printf(buf, "%s", response_data);
+
+    //将封装好的evbuffer 发送给客户端
+    evhttp_send_reply(req, HTTP_OK, "OK", buf);
+
+    evbuffer_free(buf);
+
+    printf("[response]:\n");
+    printf("%s\n", response_data);
+
+    if (root != NULL){
+        cJSON_Delete(root);
+    }
+    if (response_root != NULL) {
+        cJSON_Delete(response_root);
+    }
+    free(response_data);
+
+}
+
+
 //处理login登陆模块
 void login_handler(struct evhttp_request *req, void *arg) 
 {
@@ -237,6 +314,7 @@ int main(int argc, char *argv[])
     //也可以为特定的URI指定callback
     evhttp_set_cb(httpd, "/", httpd_handler, NULL);
     evhttp_set_cb(httpd, "/login", login_handler,NULL);
+    evhttp_set_cb(httpd, "/reg", reg_handler,NULL);
 
     //循环处理events
     event_dispatch();
